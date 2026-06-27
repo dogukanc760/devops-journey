@@ -1,0 +1,22 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: ha-cluster
+servers: 3 # Three master nodes for quorum/HA
+agents: 2  # Two worker nodes for workloads
+ports:
+  - port: 8080:80 # Maps local port 8080 to the cluster ingress load balancer
+    nodeFilters:
+      - loadbalancer
+  - port: 8443:443
+    nodeFilters:
+      - loadbalancer
+options:
+  k3d:
+    wait: true
+    timeout: "360s"
+  k3s:
+    extraArgs:
+      - arg: --tls-san=127.0.0.1
+        nodeFilters:
+          - server:*
