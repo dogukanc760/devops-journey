@@ -33,7 +33,7 @@ ping 10.0.0.2
 sudo ip netns exec test-ns ping 10.0.0.1
 
 Örnek bir soru:
-Soru: Bir pod içinde iki container var — nginx ve sidecar. nginx 80 portunu dinliyor. sidecar nasıl localhost:80'e erişebilir?
+Soru: Bir pod içinde iki container var  nginx ve sidecar. nginx 80 portunu dinliyor. sidecar nasıl localhost:80'e erişebilir?
 Cevap: Çok basit, aynı network namespace i paylaştıkları için, direkt localhost ile sidecar localhost:80 e erişebilir.
 Bu K8s'in sidecar pattern'ının temelidir. Istio'nun envoy proxy'si de tam bu şekilde çalışır, her pod'a inject edilen sidecar aynı namespace üzerinden trafiği intercept eder.
 ## Anahtar Kavramlar
