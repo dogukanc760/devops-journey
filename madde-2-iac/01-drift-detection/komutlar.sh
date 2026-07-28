@@ -82,6 +82,7 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 WEBHOOK_SECRET=rastgele-guclu-bir-secret
 EOF
 
+
 docker compose --env-file .env up -d
 
 # 4. Local Atlantis'i dışarıdan (GitHub webhook'unun) erişebilir yapmak için

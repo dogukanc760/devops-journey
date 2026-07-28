@@ -8,3 +8,5 @@ kubeconfig
 *.crt
 .env
 secrets/
+madde-2-iac/01-drift-detection/atlantis-server/atlantis-data/
+madde-2-iac/01-drift-detection/atlantis-server/.env
