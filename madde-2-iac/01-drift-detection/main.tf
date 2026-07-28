@@ -13,3 +13,4 @@ resource "local_file" "drift_test" {
 }
 # yorum satırı ekle
 # yorum satırı ekle
+# yorum satırı ekle
