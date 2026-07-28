@@ -29,7 +29,7 @@ Temel:
 terraform plan drift'i tespit ettiğinde, sana "bu kaynağı eski haline döndüreceğim" der ama bazen drift aslında bilinçli ve doğru bir değişiklik olabilir (örneğin acil bir güvenlik yaması). Bu durumda Terraform'un kodu "yanlış" olan, gerçek altyapıyı "doğru" kabul edip state'i güncellemek istersen ne yaparsın?
 
 Cevap:
-Genel prensip (araçtan bağımsız): Drift'i "kabul etmek" demek, .tf kodunu manuel yapılan değişikliğe göre güncelleyip Git'e (hangi Git olursa olsun) push etmek, sonra bu kodu bir plan/apply döngüsünden geçirip state'i gerçeklikle senkronize etmektir. Terraform'un kendisi bu konuda Atlantis mi, Terraform Cloud mu, yoksa senin intranet GitLab pipeline'ın mı çalıştırdığını bilmez — hepsi aynı plan → apply çağrısını farklı bir orkestrasyon katmanından tetikliyor.
+Genel prensip (araçtan bağımsız): Drift'i "kabul etmek" demek, .tf kodunu manuel yapılan değişikliğe göre güncelleyip Git'e (hangi Git olursa olsun) push etmek, sonra bu kodu bir plan/apply döngüsünden geçirip state'i gerçeklikle senkronize etmektir. Terraform'un kendisi bu konuda Atlantis mi, Terraform Cloud mu, yoksa senin intranet GitLab pipeline'ın mı çalıştırdığını bilmez, hepsi aynı plan → apply çağrısını farklı bir orkestrasyon katmanından tetikliyor.
 
 Atlantis / Terraform Cloud'da:
 
@@ -45,7 +45,7 @@ GitLab CI pipeline (senin tanımladığın .gitlab-ci.yml job'ı) terraform plan
 Aynı şekilde "0 to change" görürsün
 MR'ı merge edersin, apply stage'i (manuel onaylı veya otomatik) tetiklenir
 
-Fark sadece şurada: Atlantis/Terraform Cloud bu plan/apply tetikleme, kilitleme (locking) ve PR yorumlama işini senin için hazır bir şekilde yapan bir SaaS/self-hosted araç. Senin GitLab çözümün ise bunu kendi CI pipeline script'inle elle inşa etmiş halin — işlevsel olarak aynı şeyi yapıyor, sadece "kutudan çıkma" özellik seti (otomatik PR yorumu, state locking UI, policy check) yok, onu sen kendi pipeline'ında implement ediyorsun.
+Fark sadece şurada: Atlantis/Terraform Cloud bu plan/apply tetikleme, kilitleme (locking) ve PR yorumlama işini senin için hazır bir şekilde yapan bir SaaS/self-hosted araç. Senin GitLab çözümün ise bunu kendi CI pipeline script'inle elle inşa etmiş halin, işlevsel olarak aynı şeyi yapıyor, sadece "kutudan çıkma" özellik seti (otomatik PR yorumu, state locking UI, policy check) yok, onu sen kendi pipeline'ında implement ediyorsun.
 
 İkisinde de temel gerçek değişmiyor: kod = tek doğruluk kaynağı, drift kabul edilirse önce kod güncellenir, sonra plan/apply ile state buna hizalanır.
 
@@ -58,12 +58,12 @@ Fark sadece şurada: Atlantis/Terraform Cloud bu plan/apply tetikleme, kilitleme
 ## Kendi Notum
 Drift Detection'ı şöyle özetlerdim: Terraform senin yazdığın koda göre bir "gerçeklik fotoğrafı" (state) tutuyor. Biri o gerçekliği elden değiştirirse (console'dan, SSH'dan, her neyse) Terraform bunu otomatik bilmiyor, sen ona "bak bakalım" (`plan`) demen lazım. `plan` sana farkı gösteriyor, `apply` ise "hayır, kod haklı, gerçekliği koda göre düzelt" diyor.
 
-En çok şaşırdığım kısım local_file örneğindeki `create` davranışıydı — normalde "update" beklerdim ama bu kaynağın kimliğinin içeriğin hash'i olması, küçük bir detayın bile büyük farklar yaratabileceğini gösterdi. Gerçek prod ortamında böyle bir yanılgıya düşüp "aa bu resource yeniden mi oluşturuluyor, veri kaybedecek miyim" diye paniklemek yerine, önce `plan` çıktısını dikkatli okumak lazım.
+En çok şaşırdığım kısım local_file örneğindeki `create` davranışıydı, normalde "update" beklerdim ama bu kaynağın kimliğinin içeriğin hash'i olması, küçük bir detayın bile büyük farklar yaratabileceğini gösterdi. Gerçek prod ortamında böyle bir yanılgıya düşüp "aa bu resource yeniden mi oluşturuluyor, veri kaybedecek miyim" diye paniklemek yerine, önce `plan` çıktısını dikkatli okumak lazım.
 
 ## Pratik Görevler
 1-4 arası (resource oluştur, drift yap, plan ile gözlemle, apply ile geri al) local'de `local_file` provider ile gerçekten çalıştırıldı, adımlar `komutlar.sh`'da var.
 
-Atlantis kurulumu ve Slack webhook entegrasyonu gerçek bir GitHub/GitLab repo + Slack workspace erişimi gerektirdiği için (kendi hesabım/tokenlarımla kurulacak), bu ortamda uçtan uca test edilemedi. Kurulum adımları detaylıca `komutlar.sh`'da belgelendi — Docker Compose ile Atlantis, webhook bağlama, `terraform plan -detailed-exitcode` ile drift kontrolü ve Slack'e bildirim gönderen script dahil. Gerçek bir repo/workspace hazır olduğunda bu adımlar sırayla çalıştırılacak.
+Atlantis kurulumu ve Slack webhook entegrasyonu gerçek bir GitHub/GitLab repo + Slack workspace erişimi gerektirdiği için (kendi hesabım/tokenlarımla kurulacak), bu ortamda uçtan uca test edilemedi. Kurulum adımları detaylıca `komutlar.sh`'da belgelendi: Docker Compose ile Atlantis, webhook bağlama, `terraform plan -detailed-exitcode` ile drift kontrolü ve Slack'e bildirim gönderen script dahil. Gerçek bir repo/workspace hazır olduğunda bu adımlar sırayla çalıştırılacak.
 
 ## Karşılaştığım Hatalar
 İlk `terraform plan` çalıştırdığımda drift oluşturduktan sonra `~ update` bekliyordum ama `+ create` geldi. Sebebini `terraform state list` + state JSON'ını inceleyerek bulduk: local_file'ın id'si content hash'i olduğu için content değişince provider resource'u "kayıp" sayıyor. Detaylar Anahtar Kavramlar'da.
