@@ -12,3 +12,4 @@ resource "local_file" "drift_test" {
   content  = "Bu dosya Terraform tarafindan yonetiliyor. Versiyon: 1\n"
 }
 # yorum satırı ekle
+# yorum satırı ekle
