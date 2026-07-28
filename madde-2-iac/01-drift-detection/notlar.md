@@ -50,15 +50,26 @@ Fark sadece şurada: Atlantis/Terraform Cloud bu plan/apply tetikleme, kilitleme
 İkisinde de temel gerçek değişmiyor: kod = tek doğruluk kaynağı, drift kabul edilirse önce kod güncellenir, sonra plan/apply ile state buna hizalanır.
 
 ## Anahtar Kavramlar
-<!-- Öğrendiğin kavramları kendi cümlelerinle yaz -->
-- 
+- Desired state vs current state: kod ne diyor (main.tf) vs gerçek altyapı ne durumda. Drift bu ikisi arasındaki fark.
+- local_file id = content'in SHA1 hash'i. Content değişince Terraform resource'u "yok" sayıyor, bu yüzden `update` değil `create` görüyoruz. Gerçek cloud kaynaklarında (AWS instance tag gibi) API kısmi update destekliyorsa `~ update in-place` görülür.
+- `terraform plan -detailed-exitcode`: exit code 0 = drift yok, 2 = drift var, 1 = hata. Otomasyon scriptlerinde (Slack alert, CI) bu exit code'a göre karar veriliyor.
+- Atlantis: Git provider'dan (GitHub/GitLab) webhook alıp PR açılınca otomatik `plan`, merge olunca otomatik `apply` tetikleyen self-hosted araç. Intranet GitLab pipeline ile aynı işi elle inşa etmek de mümkün, Atlantis bunu hazır sunuyor.
 
 ## Kendi Notum
-<!-- Bunu yarın takım arkadaşına 2 dakikada nasıl anlatırdın? -->
+Drift Detection'ı şöyle özetlerdim: Terraform senin yazdığın koda göre bir "gerçeklik fotoğrafı" (state) tutuyor. Biri o gerçekliği elden değiştirirse (console'dan, SSH'dan, her neyse) Terraform bunu otomatik bilmiyor, sen ona "bak bakalım" (`plan`) demen lazım. `plan` sana farkı gösteriyor, `apply` ise "hayır, kod haklı, gerçekliği koda göre düzelt" diyor.
+
+En çok şaşırdığım kısım local_file örneğindeki `create` davranışıydı — normalde "update" beklerdim ama bu kaynağın kimliğinin içeriğin hash'i olması, küçük bir detayın bile büyük farklar yaratabileceğini gösterdi. Gerçek prod ortamında böyle bir yanılgıya düşüp "aa bu resource yeniden mi oluşturuluyor, veri kaybedecek miyim" diye paniklemek yerine, önce `plan` çıktısını dikkatli okumak lazım.
+
+## Pratik Görevler
+1-4 arası (resource oluştur, drift yap, plan ile gözlemle, apply ile geri al) local'de `local_file` provider ile gerçekten çalıştırıldı, adımlar `komutlar.sh`'da var.
+
+Atlantis kurulumu ve Slack webhook entegrasyonu gerçek bir GitHub/GitLab repo + Slack workspace erişimi gerektirdiği için (kendi hesabım/tokenlarımla kurulacak), bu ortamda uçtan uca test edilemedi. Kurulum adımları detaylıca `komutlar.sh`'da belgelendi — Docker Compose ile Atlantis, webhook bağlama, `terraform plan -detailed-exitcode` ile drift kontrolü ve Slack'e bildirim gönderen script dahil. Gerçek bir repo/workspace hazır olduğunda bu adımlar sırayla çalıştırılacak.
 
 ## Karşılaştığım Hatalar
-<!-- Bozma senaryolarında ne oldu? Hata mesajı neydi? Neden oldu? -->
+İlk `terraform plan` çalıştırdığımda drift oluşturduktan sonra `~ update` bekliyordum ama `+ create` geldi. Sebebini `terraform state list` + state JSON'ını inceleyerek bulduk: local_file'ın id'si content hash'i olduğu için content değişince provider resource'u "kayıp" sayıyor. Detaylar Anahtar Kavramlar'da.
 
 ## Kaynaklar
-<!-- Faydalı bulduğun linkler -->
-- 
+- Terraform local provider dokümantasyonu: https://registry.terraform.io/providers/hashicorp/local/latest/docs
+- Atlantis resmi döküman: https://www.runatlantis.io/docs/
+- Terraform detailed-exitcode referansı: https://developer.hashicorp.com/terraform/cli/commands/plan#detailed-exitcode
+- Slack Incoming Webhooks: https://api.slack.com/messaging/webhooks

@@ -1,0 +1,14 @@
+version: "3"
+services:
+  atlantis:
+    image: ghcr.io/runatlantis/atlantis:latest
+    ports:
+      - "4141:4141"
+    environment:
+      ATLANTIS_GH_USER: "atlantis-bot"
+      ATLANTIS_GH_TOKEN: "${GITHUB_TOKEN}"
+      ATLANTIS_GH_WEBHOOK_SECRET: "${WEBHOOK_SECRET}"
+      ATLANTIS_REPO_ALLOWLIST: "github.com/dogukanc760/devops-journey"
+      ATLANTIS_PORT: "4141"
+    volumes:
+      - ./atlantis-data:/home/atlantis/.atlantis
