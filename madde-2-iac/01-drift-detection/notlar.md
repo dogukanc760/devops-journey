@@ -63,7 +63,9 @@ En çok şaşırdığım kısım local_file örneğindeki `create` davranışıy
 ## Pratik Görevler
 1-4 arası (resource oluştur, drift yap, plan ile gözlemle, apply ile geri al) local'de `local_file` provider ile gerçekten çalıştırıldı, adımlar `komutlar.sh`'da var.
 
-Atlantis kurulumu ve Slack webhook entegrasyonu gerçek bir GitHub/GitLab repo + Slack workspace erişimi gerektirdiği için (kendi hesabım/tokenlarımla kurulacak), bu ortamda uçtan uca test edilemedi. Kurulum adımları detaylıca `komutlar.sh`'da belgelendi: Docker Compose ile Atlantis, webhook bağlama, `terraform plan -detailed-exitcode` ile drift kontrolü ve Slack'e bildirim gönderen script dahil. Gerçek bir repo/workspace hazır olduğunda bu adımlar sırayla çalıştırılacak.
+Atlantis kurulumu gerçek bir GitHub repo, PAT ve ngrok tüneli ile uçtan uca kuruldu ve test edildi, detaylar `atlantis-ngrok/notlar.md`'de. PR'da otomatik `terraform plan` yorumu başarıyla alındı.
+
+Slack webhook ile drift alert görevi atlandı, günlük işte Rancher entegrasyonlarında zaten sık yapılan bir iş olduğu için tekrar pratik yapmaya gerek görülmedi. Kurulum adımları (`terraform plan -detailed-exitcode` ile exit code kontrolü + curl ile Slack'e POST) yine de `komutlar.sh`'da referans olarak duruyor, gerekirse oradan uygulanabilir.
 
 ## Karşılaştığım Hatalar
 İlk `terraform plan` çalıştırdığımda drift oluşturduktan sonra `~ update` bekliyordum ama `+ create` geldi. Sebebini `terraform state list` + state JSON'ını inceleyerek bulduk: local_file'ın id'si content hash'i olduğu için content değişince provider resource'u "kayıp" sayıyor. Detaylar Anahtar Kavramlar'da.
