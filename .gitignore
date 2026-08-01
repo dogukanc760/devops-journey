@@ -10,3 +10,4 @@ kubeconfig
 secrets/
 madde-2-iac/01-drift-detection/atlantis-server/atlantis-data/
 madde-2-iac/01-drift-detection/atlantis-server/.env
+madde-2-iac/03-state-management/remote-backend-demo/backups/

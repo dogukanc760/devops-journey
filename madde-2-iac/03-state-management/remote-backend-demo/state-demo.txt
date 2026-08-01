@@ -1,0 +1,1 @@
+State artık MinIO'da tutuluyor, local'de degil. Versiyon 2.
