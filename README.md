@@ -1,278 +1,243 @@
-# DevOps & Platform Engineering Handbook
+# DevOps Journey — Senior DevOps & Platform Engineer Yol Haritası
 
-> Türkçe DevOps kaynak eksikliğine karşı oluşturulmuş pratik el kitabı.  
-> Her konu: **neden var → nasıl çalışır → lab ortamında nasıl uygulanır** formatında ele alınır.
-
----
-
-## Bu Kitap Hakkında
-
-Türkiye'de Senior DevOps / Platform Engineer olmak isteyenler için Türkçe kapsamlı kaynak bulmak hâlâ zor. Bu handbook:
-
-- İngilizce dokümantasyonu takip etmek için gerekli altyapıyı Türkçe kurar
-- Her konuyu soyut bırakmaz; **çalışan komutlar, gerçek hata mesajları ve çözümleri** içerir
-- Lab ortamı olarak **Mac + k3d** kullanır, bare-metal senaryolar için ayrıca belgelenmiştir
-- Production-grade kararların arkasındaki **"neden?"** sorusunu yanıtlar
+> Türkçe DevOps/Platform Engineering kaynak eksikliğine karşı hazırlanmış, uygulamalı bir öğretim kaynağı.
+> Her konu **neden var → nasıl çalışır → lab ortamında gerçekten uygulanır → gerçek hatalarıyla belgelenir** formatında işlenir.
 
 ---
 
-## Kapsam
+Bu kaynak sadece araç tanıtımı değil, Platform Engineering ve DevSecOps'a odaklanan, AWS temelleriyle genişleyen uçtan uca bir öğretim materyali. Her konu gerçek hata mesajlarıyla, gerçek debug süreçleriyle işlenir, çünkü asıl öğrenilmesi gereken şey araçların isimleri değil, karar verme yargısı.
+
+Detaylı ilerleme takibi (Durum, Öncelik, checkbox'lar) **Notion'daki roadmap veritabanında** tutuluyor, bu README sadece genel yapının haritası.
+
+---
+
+## Öğrenme Metodolojisi
+
+Her konu için 7 adım sırayla işlenir:
+
+1. **Neden var?** — "Bu olmasaydı ne olurdu?" formatında anlatım + örnek soru-cevap
+2. **İpucu** — Hangi araç, nereden başlanır
+3. **Kendin dene** — Çalıştır, çıktıyı gözlemle
+4. **Ne gördün?** — Çıktıyı yorumla
+5. **Şimdi boz** — Kasıtlı hata yap, sistemi gözlemle
+6. **Bana anlat** — Feynman tekniği: 2 dakikada anlat
+7. **Kendi Notum** — `notlar.md`'ye kendi kelimelerinle yaz
+
+**Kural:** Pratik görevler, bir subtask'ın (klasörün) tüm konuları kavramsal olarak bitmeden başlamaz.
 
 ```
-madde-1-altyapi/
-├── 01-high-availability/         → etcd quorum, HA cluster, k3d multi-node
-├── 02-ag-linux-temelleri/        → IP/CIDR, VLAN, DNS, NAT, iptables, L4/L7
-├── 03-dagitik-storage/           → Ceph, Rook, Longhorn, StorageClass/PV/PVC
-├── 04-k8s-derinligi/             → Control Plane, StatefulSet, Operator, Ingress TLS
-└── 05-bare-metal-provisioning/   → PXE, MaaS, Tinkerbell, cloud-init
-
-madde-2-iac/                      → Terraform, Ansible, Helm, Kustomize
-madde-3-guvenlik/                 → OPA/Gatekeeper, Vault, mTLS, RBAC, NetworkPolicy
-madde-4-gitops/                   → ArgoCD, Flux, GitOps prensipleri
-madde-5-gozlemlenebilirlik/       → Prometheus, Grafana, Loki, Jaeger, OpenTelemetry
-madde-6-trafik-kural/             → Istio, Linkerd, Service Mesh, Envoy, Rate Limiting
-madde-7-k8s-dev/                  → Operator SDK, CRD, Admission Webhook, Controller
-madde-8-platform/                 → Backstage, IDP, Golden Path, Developer Portal
+Konu 1 → Konu 2 → ... → Tüm Konular Bitti → Pratik Görevler
 ```
 
-**Toplam:** 8 madde / 25 subtopic / 181 pratik görev
+---
+
+## Klasör Yapısı Kuralı
+
+```
+madde-X-isim/
+└── NN-subtask-adi/
+    ├── notlar.md     → Neden var, Anahtar Kavramlar, Kendi Notum, Karşılaştığım Hatalar, Kaynaklar
+    ├── komutlar.sh   → gerçekten çalıştırılan komutlar + gerçek hata/çözüm belgesi
+    └── *.tf / *.yaml → varsa manifest/config dosyaları
+```
+
+Not: `-` ve `—` gibi tire işaretleri notlarda kullanılmıyor.
 
 ---
 
 ## Lab Ortamı
 
 | Bileşen | Araç | Not |
-|---------|------|-----|
-| Local Kubernetes | k3d (Docker içinde K3s) | Mac M-serisi uyumlu |
-| Bare-Metal Sim. | k3d multi-node | Kernel kısıtları belgeli |
-| Bare-Metal Gerçek | MaaS veya Tinkerbell | 05 klasörü |
-| Container Runtime | containerd | k3d içinde gömülü |
-| Ingress | Nginx Ingress Controller | MetalLB olmadan port-forward |
-| Storage (local) | local-path provisioner | k3d default |
-| Storage (prod) | Rook-Ceph / Longhorn | Bare-metal gerektirir |
+|---|---|---|
+| Local Kubernetes | k3d (Docker/OrbStack içinde K3s) | Mac Apple Silicon uyumlu |
+| Container | Docker / OrbStack | Madde 2'de Packer/Terraform ile |
+| Self-hosted S3 | MinIO | State backend, felaket kurtarma testleri |
+| Bulut | AWS (ücretsiz katman) | Madde 9 sonrası devreye giriyor |
+| CNI | Cilium (eBPF) | Madde 3'te k3d'de flannel'siz kuruldu |
 
 ---
 
-## Madde 1 — Temel Altyapı, Sanallaştırma ve Storage
+## Yol Haritası
 
-### 1.1 High Availability (HA)
+| # | Madde | Durum | Klasör |
+|---|---|---|---|
+| 1 | Temel Altyapı, Sanallaştırma ve Storage | ✅ Tamamlandı | `madde-1-altyapi/` |
+| 2 | Kod Olarak Altyapı ve Konfigürasyon | ✅ Tamamlandı | `madde-2-iac/` |
+| 3 | Ağ, Güvenlik ve Sır Yönetimi | 🔥 Devam ediyor (1/5) | `madde-3-guvenlik/` |
+| 4 | GitOps ve Sürekli Dağıtım | 🗂 Backlog | `madde-4-gitops/` |
+| 5 | İleri Seviye Gözlemlenebilirlik | 🗂 Backlog | `madde-5-gozlemlenebilirlik/` |
+| 6 | Gelişmiş Trafik ve Kural Yönetimi | 🗂 Backlog | `madde-6-trafik-kural/` |
+| 7 | K8s Geliştiriciliği ve Özel Araçlar | 🗂 Backlog | `madde-7-k8s-dev/` |
+| 8 | Platform Mühendisliği / IDP | 🗂 Backlog | `madde-8-platform/` |
+| 9 | Felaket Kurtarma ve Çoklu Cluster | 🗂 Backlog | `madde-9-felaket-kurtarma/` |
+| 10 | SRE Kültürü ve Olay Yönetimi | 🗂 Backlog | `madde-10-sre-olay-yonetimi/` |
+| 11 | Performans ve Kapasite Testi | 🗂 Backlog | `madde-11-performans-kapasite/` |
+| 12 | Çok Kiracılı Platform (Multi-Tenancy) | 🗂 Backlog | `madde-12-multi-tenancy/` |
+| 13 | Veritabanı Operasyonları ve Migration | 🗂 Backlog | `madde-13-veritabani-operasyonlari/` |
+| 14 | Bulut Mimarisi ve Serverless | 🗂 Backlog | `madde-14-bulut-mimarisi/` |
+| 15 | Bulut Güvenliği ve Uyumluluk | 🗂 Backlog | `madde-15-bulut-guvenlik/` |
+| 16 | Veri ve Streaming Platformları | 🗂 Backlog | `madde-16-veri-streaming/` |
+| 17 | MLOps ve AI Altyapısı | 🗂 Backlog | `madde-17-mlops/` |
+| 18 | Sertifikasyon Yolu ve Derinlemesine Tecrübe | 🗂 Backlog | `madde-18-sertifikasyon/` |
 
-**Neden:** Tek node olan bir cluster, node düşünce servisi tamamen keser. HA, etcd quorum ile bu riski dağıtır.
+**Toplam: 18 madde.** Madde 1-8 klasik on-premise/local Kubernetes derinliğini, Madde 9-13 gerçek dünya olgunluğunu (felaket kurtarma, SRE, kapasite, çok kiracılılık, veritabanı), Madde 14-17 bulut mimarisi ve uzmanlık alanlarını (serverless, güvenlik/uyumluluk, veri platformları, MLOps), Madde 18 ise AWS temellerinden SAA-C03 sertifikasyonuna ve gerçek dünya tecrübesine evrilen kapanış maddesini kapsıyor.
 
-**Temel kavramlar:**
-- **etcd:** K8s'in tüm state'ini tutan distributed key-value store. Quorum için `2n+1` node gerekir (3 node → 1 arıza tolere eder).
-- **Control Plane bileşenleri:** API Server (tüm istekler buraya gelir), Controller Manager (desired state'i korur), Scheduler (pod → node ataması), etcd.
-- **k3d HA cluster:**
+### Alt konu haritası
 
-```bash
-k3d cluster create ha-cluster \
-  --config madde-1-altyapi/01-high-availability/ha-cluster.yaml
-```
+<details>
+<summary>Madde 1 — Temel Altyapı, Sanallaştırma ve Storage</summary>
 
-`ha-cluster.yaml` içinde: 3 server (etcd quorum), 2 agent, port mapping 8080→80 / 8443→443.
+- `01-high-availability/` — etcd quorum, HA cluster
+- `02-ag-linux-temelleri/` — IP/CIDR, VLAN, DNS, NAT, iptables, L4/L7
+- `03-dagitik-storage/` — Ceph, Rook, Longhorn, StorageClass/PV/PVC
+- `04-k8s-derinligi/` — Control Plane, StatefulSet, Operator, Ingress TLS
+- `05-bare-metal-provisioning/` — PXE, MaaS, Tinkerbell, cloud-init
+</details>
 
----
+<details>
+<summary>Madde 2 — Kod Olarak Altyapı ve Konfigürasyon</summary>
 
-### 1.2 Ağ ve Linux Temelleri
+- `01-drift-detection/` — Terraform plan/apply, Atlantis, drift alarmı
+- `02-immutable-infrastructure/` — Packer golden image, Blue-Green deployment
+- `03-state-management/` — MinIO remote backend, state locking, workspace
+</details>
 
-#### IP / CIDR / Subnetting
+<details>
+<summary>Madde 3 — Ağ, Güvenlik ve Sır Yönetimi</summary>
 
-- `/28` = 16 IP, 14 kullanılabilir host
-- K8s pod CIDR: `10.244.0.0/16` (65536 adres — her pod kendi IP'sini alır)
+- `01-zero-trust-network/` — Cilium, eBPF, default-deny, L7 policy, Hubble ✅
+- `02-api-ingress-guvenligi/` — Rate limiting, WAF, mTLS
+- `03-oidc-iam/` — Keycloak, RBAC, Service Account
+- `04-vault-dynamic-secrets/` — HashiCorp Vault, dinamik DB credential
+- `05-sops-sealed-secrets/` — SOPS, Sealed Secrets, GitOps uyumu
+</details>
 
-#### VLAN (802.1Q)
+<details>
+<summary>Madde 4 — GitOps ve Sürekli Dağıtım</summary>
 
-- **Access port:** Tek VLAN, tag'siz (son kullanıcı cihazları)
-- **Trunk port:** Birden fazla VLAN, 802.1Q tag'li (switch-switch, switch-router)
+- `01-cicd-mimari/` — Self-hosted runner, pipeline aşamaları
+- `02-progressive-delivery/` — Argo Rollouts, canary, Flagger
+- `03-shift-left-security/` — Trivy, SBOM, Cosign, Kyverno
+- `04-environment-promotion/` — ArgoCD, dev/staging/prod promotion
+</details>
 
-#### DNS / CoreDNS
+<details>
+<summary>Madde 5 — İleri Seviye Gözlemlenebilirlik</summary>
 
-K8s içinde `myapp.local` custom domain:
+- `01-merkezi-loglama/` — Loki, Promtail, Grafana, LogQL
+- `02-distributed-tracing/` — Tempo, OpenTelemetry, Beyla
+- `03-slo-error-budget/` — SLI/SLO/SLA, burn rate, Sloth
+- `04-sentetik-izleme/` — Blackbox Exporter, k6, runbook
+</details>
 
-```bash
-# CoreDNS ConfigMap'e custom zone ekle
-kubectl apply -f madde-1-altyapi/02-ag-linux-temelleri/dns/coredns-custom.yaml
-# Test
-kubectl run test-dns --image=busybox --restart=Never --rm -it -- nslookup myapp.local
-```
+<details>
+<summary>Madde 6 — Gelişmiş Trafik ve Kural Yönetimi</summary>
 
-#### NAT — SNAT / DNAT
+- `01-service-mesh/` — Istio, mTLS, Circuit Breaker
+- `02-policy-as-code/` — Kyverno, OPA Gatekeeper
+- `03-chaos-engineering/` — Chaos Mesh, blast radius, game day
+</details>
 
-- **SNAT (Masquerade):** Pod'dan internet'e → kaynak IP değişir (pod IP → node IP)
-- **DNAT:** Dışarıdan servise → hedef IP değişir (NodePort/LB IP → pod IP)
-- **K8s DNAT zinciri:** `KUBE-SERVICES → KUBE-SVC-xxx → KUBE-SEP-xxx`
+<details>
+<summary>Madde 7 — K8s Geliştiriciliği ve Özel Araçlar</summary>
 
-#### L4 vs L7 Load Balancing
+- `01-crd-operator-pattern/` — Kubebuilder, controller-runtime, reconcile loop
+- `02-mutating-validating-webhooks/` — Admission Controller, Golang
+- `03-devops-cli/` — Cobra, Viper, client-go
+</details>
 
-| | L4 (TCP/UDP) | L7 (HTTP/gRPC) |
-|-|-------------|----------------|
-| İncelediği | IP + Port | URL, Header, Body |
-| Örnek | MetalLB, kube-proxy | Nginx Ingress, Traefik |
-| Her ikisi | — | **Service Mesh** (Istio/Linkerd) |
+<details>
+<summary>Madde 8 — Platform Mühendisliği / IDP</summary>
 
-**Gelen istek akışı:** `İnternet → MetalLB (L4) → Nginx Ingress (L7) → Pod`
+- `01-backstage-idp/` — Software Catalog, Scaffolder, TechDocs
+- `02-finops-kubecost/` — Namespace maliyet ayrıştırma, VPA
+- `03-devex-telepresence/` — Telepresence, Skaffold, inner loop
+</details>
 
-#### iptables
+<details>
+<summary>Madde 9 — Felaket Kurtarma ve Çoklu Cluster</summary>
 
-```bash
-# K8s DNAT zincirini gözlemle
-iptables -t nat -L KUBE-SERVICES --line-numbers
-```
+- `01-backup-restore-velero/` — Velero, RTO/RPO
+- `02-coklu-bolge-cluster-mimarisi/` — Route53 failover, cross-region S3
+- `03-dr-tatbikati-runbook/` — Tabletop exercise, gerçek DR tatbikatı
+</details>
 
----
+<details>
+<summary>Madde 10 — SRE Kültürü ve Olay Yönetimi</summary>
 
-### 1.3 Dağıtık Storage
+- `01-olay-siddeti-surec-tasarimi/` — Severity, incident commander
+- `02-postmortem-toil-azaltma/` — Blameless postmortem, 5 Whys
+- `03-oncall-alerting-mimarisi/` — PagerDuty, escalation policy
+- `04-error-budget-karar-alma/` — Deploy freeze politikası
+</details>
 
-#### Ceph (Rook Operator)
+<details>
+<summary>Madde 11 — Performans ve Kapasite Testi</summary>
 
-- **RBD (Block):** PVC → single pod, ReadWriteOnce — veritabanları için
-- **CephFS (File):** PVC → multi-pod, ReadWriteMany — paylaşımlı dosya sistemi
-- **Object (S3-compat.):** HTTP API, MinIO da Object Storage'dır
+- `01-load-stress-soak-test/` — k6, p50/p95/p99
+- `02-kapasite-planlama/` — Little's Law, bottleneck analizi
+- `03-autoscaler-aws-olcekleme/` — HPA/VPA/Cluster Autoscaler, Spot instance
+</details>
 
-```bash
-# Rook operator (bare-metal'da çalışır)
-helm install rook-ceph rook-release/rook-ceph -n rook-ceph --create-namespace
-kubectl apply -f rook-ceph/komutlar.sh  # CephCluster CRD
-```
+<details>
+<summary>Madde 12 — Çok Kiracılı Platform (Multi-Tenancy)</summary>
 
-> **Not:** k3d'de Unix socket chown kısıtı var, bare-metal gerektirir.
+- `01-namespace-vcluster-izolasyon/` — vcluster, noisy neighbor
+- `02-maliyet-chargeback-tenant/` — Kubecost chargeback, onboarding/offboarding
+- `03-aws-node-iam-izolasyon/` — IRSA, taint/toleration
+</details>
 
-#### Longhorn
+<details>
+<summary>Madde 13 — Veritabanı Operasyonları ve Migration Stratejisi</summary>
 
-Lightweight distributed block storage, K8s-native.
+- `01-zero-downtime-migration/` — Expand-contract pattern
+- `02-buyuk-tablo-online-schema-change/` — gh-ost mantığı, backfill
+- `03-aws-managed-db-operasyonlari/` — RDS/Aurora Blue-Green
+</details>
 
-```bash
-helm install longhorn longhorn/longhorn -n longhorn-system --create-namespace
-```
+<details>
+<summary>Madde 14 — Bulut Mimarisi ve Serverless/Event-Driven Sistemler</summary>
 
-> **Not:** k3d node'larında `open-iscsi` yüklü değil, bare-metal gerektirir.
+- `01-mimari-karar-well-architected/` — RFC yazma, mimari kurul savunması
+- `02-serverless-event-driven/` — Lambda, Step Functions, SQS/SNS, DLQ
+- `03-maliyet-modelleme-finops/` — Break-even analizi
+</details>
 
-#### StorageClass → PV → PVC Zinciri
+<details>
+<summary>Madde 15 — Bulut Güvenliği ve Uyumluluk</summary>
 
-```
-StorageClass (tanım)
-  └── PVC oluştur (talep)
-        └── PV otomatik yaratılır (provisioner)
-              └── Pod'a mount edilir
-```
+- `01-organizasyonel-guvenlik-kisitlari/` — AWS Organizations, SCP, CSPM
+- `02-tedarik-zinciri-guvenligi/` — SLSA, SBOM
+- `03-uyumluluk-denetimi-pentest/` — SOC2 control matrix, pentest simülasyonu
+</details>
 
-**Reclaim Policy:**
-- `Delete`: PVC silinince PV de silinir (default, ephemeral data)
-- `Retain`: PV kalır, veri korunur (production DB'ler için)
+<details>
+<summary>Madde 16 — Veri ve Streaming Platformları</summary>
 
----
+- `01-kafka-streaming-temelleri/` — Broker, partition, consumer group
+- `02-schema-registry-veri-sozlesmesi/` — Avro/Protobuf, compatibility
+- `03-stream-processing/` — ksqlDB, windowing
+</details>
 
-### 1.4 Kubernetes Derinliği
+<details>
+<summary>Madde 17 — MLOps ve AI Altyapısı</summary>
 
-#### Ingress + TLS
+- `01-model-serving-altyapisi/` — KServe, GPU scheduling
+- `02-training-pipeline-versiyonlama/` — MLflow, canary model deployment
+- `03-production-monitoring-drift/` — Model drift, otomatik yeniden eğitim
+- `04-vector-db-rag-altyapisi/` — Qdrant/Weaviate, RAG
+</details>
 
-```bash
-# Self-signed sertifika
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout tls.key -out tls.crt -subj "/CN=myapp.local"
-kubectl create secret tls myapp-tls --key tls.key --cert tls.crt
+<details>
+<summary>Madde 18 — Sertifikasyon Yolu ve Derinlemesine Tecrübe</summary>
 
-# Test (MetalLB olmadan)
-kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 9443:443
-curl -k -H "Host: myapp.local" https://127.0.0.1:9443
-```
-
-#### StatefulSet
-
-Deployment'tan farkı:
-- **Stable identity:** `postgres-0`, `postgres-1` (rastgele değil)
-- **Sıralı başlatma/kapatma:** 0 → 1 → 2 (Deployment paralel)
-- **volumeClaimTemplates:** Her pod kendi PVC'sini alır
-
-```bash
-kubectl delete pod postgres-0   # pod ölür
-# → postgres-0 olarak yeniden başlar, AYNI PVC'ye bağlanır
-```
-
-#### etcd Backup
-
-```bash
-# k3d HA cluster'da
-docker exec k3d-ha-cluster-server-0 k3s etcd-snapshot save
-# Snapshot: /var/lib/rancher/k3s/server/db/snapshots/
-```
-
-#### Operator Pattern
-
-CRD + Controller. `CephCluster` yazdın → Rook controller Ceph'i ayağa kaldırdı. Aynı mantık CloudNativePG, cert-manager vb.
-
----
-
-### 1.5 Bare-Metal Provisioning
-
-#### PXE Boot Zinciri
-
-```
-Makine açılır
-  → DHCP'den IP + next-server alır (dnsmasq)
-  → TFTP'den iPXE loader indirir
-  → HTTP'den OS imajı + autoinstall config indirir
-  → Ubuntu kurulur
-```
-
-Komutlar: `05-bare-metal-provisioning/pxe-boot/komutlar.sh`
-
-#### MaaS (Metal as a Service)
-
-Canonical'ın datacenter provisioning çözümü. Fiziksel makineyi:  
-`Enlist → Commission → Test → Ready → Deploy → Deployed`
-
-BMC (IPMI) üzerinden makineleri uzaktan açıp kapatabilir.
-
-Komutlar: `05-bare-metal-provisioning/maas/komutlar.sh`
-
-#### Tinkerbell (CNCF)
-
-GitOps-friendly, workflow tabanlı. Her provisioning adımı bir container action.
-
-```yaml
-# Workflow: hardware + template bağlar
-kind: Workflow
-spec:
-  templateRef: ubuntu-22-04
-  hardwareRef: worker-node-01
-```
-
-Komutlar: `05-bare-metal-provisioning/tinkerbell/komutlar.sh`
-
-#### cloud-init / autoinstall
-
-- **cloud-init:** OS boot sonrası çalışır, kullanıcı/paket/dosya/komut yapılandırır
-- **autoinstall:** Ubuntu kurulum sırasında okunur (subiquity), disk bölümleme dahil
-
-```yaml
-#cloud-config
-packages: [curl, git, open-iscsi]
-runcmd:
-  - systemctl enable --now open-iscsi
-```
-
-Komutlar: `05-bare-metal-provisioning/cloud-init/komutlar.sh`
+- `01-aws-temel-hizmetleri/` — IAM, S3, EC2, VPC, terraform import
+- `02-derinlemesine-vaka-analizi/` — Postmortem analizi, tekrarlanan game-day
+- `03-aws-saa-c03-evrim/` — SAA-C03 sınav hazırlığı ve sertifikasyon
+</details>
 
 ---
 
-## Klasör Yapısı Kuralları
+## Kullanım
 
-Her konu klasöründe:
-
-```
-konu-adi/
-├── notlar.md       → kendi kelimelerinle özet (Feynman tekniği)
-├── komutlar.sh     → çalıştırılan komutlar + açıklamalar
-└── *.yaml          → manifest / config dosyaları
-```
-
-Pratik görevler o subtask'ın tüm konuları bittikten sonra yapılır.
-
----
-
-## Katkı ve Kullanım
-
-Bu handbook açık geliştirilmektedir. Hata, eksik veya Türkçe çeviri önerisi için PR açabilirsiniz.
-
-Her komut gerçek lab ortamında test edilmiştir. Hata mesajları ve çözümleri ilgili `notlar.md` ve `komutlar.sh` dosyalarına eklenmiştir.
+Bu repo açık geliştiriliyor, gerçek zamanlı öğrenme sürecinin kaydı olduğu için bazı klasörler boş şablon, bazıları tam dolu olabilir. Her `komutlar.sh`, gerçekten çalıştırılmış komutları ve karşılaşılan gerçek hataları/çözümleri içerir, kopyala-yapıştır bir tutorial değildir.
