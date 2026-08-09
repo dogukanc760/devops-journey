@@ -27,6 +27,9 @@ Statik yaklaşımda Vault da olsa bir "kasa" gibi davranır, önceden oluşturul
 - revocation_statements boş bırakılırsa (bizim durumumuzda öyleydi) postgresql-database-plugin kendi varsayılanını kullanır, bu genelde `DROP ROLE IF EXISTS "{{name}}"` gibi idempotent bir SQL'dir. Bu yüzden DB'deki kullanıcıyı Vault'a haber vermeden elle sildik, sonra revoke ettik, hiçbir hata çıkmadı, çünkü IF EXISTS zaten var olmayan bir rolü silmeye çalışmayı hataya çevirmiyor.
 - Revoke edilmiş (tamamlanmış) bir lease için `vault lease lookup` "invalid lease" hatası verir. Bu bir arıza değil, tam tersi kanıt: lease tamamen temizlendiği için Vault'un kendi kayıtlarından da silinmiş, aranacak bir şey kalmamış demektir.
 - Lease ID, hangi kullanıcı/pod'un hangi credential'ı ne zaman aldığını izlemeyi sağlar, bu da sızıntı sonrası "kaynağı bul" sürecini statik sırlara göre çok kolaylaştırır.
+- Kubernetes auth method (`vault auth enable kubernetes`), Vault'a pod'ları kimlik olarak tanımayı öğretir. Pod kendi ServiceAccount token'ını Vault'a gösterir, Vault bu token'ı K8s API'sine sorup gerçekten geçerli mi diye doğrular. Bu, OIDC/insan kullanıcı akışından tamamen ayrı bir kimlik doğrulama yolu.
+- k8s auth role (`auth/kubernetes/role/...`), "hangi ServiceAccount, hangi namespace'te, hangi policy'i alır" eşlemesini tanımlar. `bound_service_account_names`/`bound_service_account_namespaces` ile daraltılır, sadece o ServiceAccount'ı kullanan pod'lar o policy'i alabilir.
+- Vault Agent Injector, annotation tabanlı bir mutating webhook'tur. Pod manifestine `vault.hashicorp.com/agent-inject: "true"` gibi annotation'lar eklenince, pod oluşturulurken otomatik olarak bir init container (ilk secret'ı çeker) ve bir sidecar container (secret'ı güncel tutar) eklenir. Uygulama kodu Vault'un varlığından habersiz kalır, secret'ı sadece `/vault/secrets/...` altındaki bir dosyadan okur.
 
 ## Kendi Notum
 <!-- Bunu yarın takım arkadaşına 2 dakikada nasıl anlatırdın? -->
@@ -44,7 +47,6 @@ O yüzden Vault'u dynamic secret engine ve tanımlarıyla ihtiyaca göre kullan�
 2. `vault lease revoke <lease_id>` komutu "Success! Revoked lease" DEĞİL, "All revocation operations queued successfully!" döndü. İlk bakışta hata gibi görünmedi ama beklenen mesajdan farklıydı, bu da revoke'un senkron değil asenkron çalıştığını gösterdi, `docker logs vault-dev` içindeki `expiration: revoked lease: lease_id=...` satırıyla gerçek tamamlanma zamanı doğrulandı.
 3. DB'deki dinamik kullanıcıyı Vault'a haber vermeden elle `DROP ROLE` ile sildik, sonra aynı lease için `vault lease revoke` çalıştırdık, hiçbir hata çıkmadı. Sebep bir arıza değildi, revocation_statements boş bırakıldığı için plugin'in varsayılan `DROP ROLE IF EXISTS` SQL'i idempotent çalıştı, var olmayan bir rolü silmeye çalışmak Postgres'te hataya sebep olmadı.
 4. Revoke edilmiş bir lease için `vault lease lookup <lease_id>` "invalid lease" hatası verdi. Bu da bir arıza değildi, lease tamamen temizlendiği için Vault'un kendi kayıtlarından silinmiş olması bekleniyordu, hata mesajı aslında işlemin başarıyla tamamlandığının kanıtıydı.
-
 ## Kaynaklar
 <!-- Faydalı bulduğun linkler -->
 - HashiCorp Vault Database Secrets Engine resmi dokümantasyonu (postgresql-database-plugin, creation_statements, revocation_statements)

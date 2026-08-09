@@ -218,31 +218,50 @@ hubble observe --protocol http -n default
 # ------------------------------------------------------------
 # Policy ihlalini logla ve alert uret
 # ------------------------------------------------------------
-# NOT: Su an gercek bir Slack workspace'i kurulu degil, bu yuzden
-# asagidaki script YAZILDI/DOKUMANTE EDILDI ama gercekten calistirilip
-# Slack'e gonderim yapilmadi. Mantik Drift Detection'daki (Madde 2)
-# Slack webhook scriptiyle birebir ayni.
+# NOT: Gercek bir Slack workspace'i kurulu olmadigi icin gercek bir
+# webhook'a POST atmak yerine, ayni mantigi (DROPPED satirini yakala,
+# alert uret) LOKAL bir alert dosyasina yazarak GERCEKTEN test
+# ediyoruz. Slack kismi yorum satiri olarak birakildi, istenirse
+# SLACK_WEBHOOK_URL doldurulup curl satiri acilabilir.
 
 cat > watch-policy-violations.sh << 'EOF'
 #!/bin/bash
 # hubble observe ciktisini surekli izler, DROPPED gecen bir satir
-# gorunce Slack'e bildirim gonderir.
+# gorunce hem ekrana hem policy-violations.log dosyasina yazar.
+# Gercek Slack entegrasyonu icin altta yorumlu curl satiri var.
 
-SLACK_WEBHOOK_URL="https://hooks.slack.com/services/SENIN/WEBHOOK/URLIN"
+# SLACK_WEBHOOK_URL="https://hooks.slack.com/services/SENIN/WEBHOOK/URLIN"
 
 hubble observe --protocol http -n default -f | while read -r line; do
   if echo "$line" | grep -q "DROPPED"; then
-    echo "POLICY IHLALI TESPIT EDILDI: $line"
+    ALERT="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] POLICY IHLALI TESPIT EDILDI: $line"
+    echo "$ALERT"
+    echo "$ALERT" >> policy-violations.log
 
-    curl -X POST -H 'Content-type: application/json' \
-      --data "{\"text\": \"⚠️ *Cilium Policy İhlali* — \`\`\`${line}\`\`\`\"}" \
-      "$SLACK_WEBHOOK_URL"
+    # curl -X POST -H 'Content-type: application/json' \
+    #   --data "{\"text\": \"⚠️ *Cilium Policy İhlali* — \`\`\`${line}\`\`\`\"}" \
+    #   "$SLACK_WEBHOOK_URL"
   fi
 done
 EOF
 
 chmod +x watch-policy-violations.sh
-# Calistirmak icin: ./watch-policy-violations.sh &
-# (arka planda calisir, DROPPED gecen her satirda Slack'e mesaj atar)
+
+# GERCEK TEST: script'i arka planda baslat, sonra yasak bir istek
+# (DELETE) gonderip DROPPED satirinin gercekten yakalanip log
+# dosyasina dustugunu dogrula.
+./watch-policy-violations.sh &
+WATCHER_PID=$!
+sleep 2
+
+kubectl run client --image=curlimages/curl --labels="app=client" -it --rm --restart=Never -- \
+  curl -s -X DELETE -o /dev/null -w "DELETE durum kodu: %{http_code}\n" --max-time 2 http://server-svc
+
+sleep 2
+cat policy-violations.log
+# Beklenen: policy-violations.log icinde en az bir satir, DROPPED
+# gecen DELETE isteğiyle ilgili, zaman damgali bir kayit.
+
+kill $WATCHER_PID 2>/dev/null
 
 

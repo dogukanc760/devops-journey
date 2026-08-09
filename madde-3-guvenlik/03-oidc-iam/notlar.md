@@ -27,6 +27,7 @@ Cevap:
 - Çoklu rol tasarımı (readonly/dev/ops): least privilege tek bir rolle değil, sorumluluk seviyesine göre ayrı katmanlarda uygulanır. readonly sadece get/list/watch yapar. dev, pod/service/deployment üzerinde create/update/patch de yapabilir ama delete yapamaz, namespace-scoped Role'dür. ops ise delete dahil tüm operasyonel fiillere sahip ama secrets ve rbac.authorization.k8s.io kaynaklarına hiç erişemez, ClusterRole olarak tanımlanır çünkü operasyon genelde tek namespace'le sınırlı kalmaz. "Operasyon yapabilsin ama yetki sistemine dokunamasın" prensibi burada.
 - Audit logging: level: Metadata sadece kim, ne zaman, hangi kaynağa, hangi fiili uyguladı bilgisini loglar, istek/cevap gövdesi yok. level: RequestResponse hem isteği hem cevabı tam gövdesiyle loglar, maliyetli olduğu için sadece kritik kaynaklara (burada pods) uygulanır, geri kalan her şey Metadata seviyesinde kalır. omitStages: [RequestReceived] gereksiz "istek geldi ama henüz işlenmedi" kaydını atlar.
 - apiserver flag'leri (--oidc-*, --audit-policy-file) k3d'de sıcak değiştirilemez, sadece cluster create anında set edilir. Yeni bir flag eklemek (audit) cluster'ı yeniden kurmayı gerektirir, bu yüzden var olan OIDC flag'leri kaybolmasın diye aynı create komutunda tekrar verilir. Audit ile OIDC birbirinden bağımsız iki konu, sadece bu teknik zorunluluktan aynı komutta bir araya geliyorlar.
+- ServiceAccount, insan kullanıcıdan (OIDC ile doğrulanan devuser) tamamen ayrı bir kimlik türüdür, pod'ların K8s API'sine erişimi için kullanılır. Bir pod'a ServiceAccount atanınca, pod kendi token'ını `/var/run/secrets/kubernetes.io/serviceaccount/token` yolundan okuyup API server'a "Authorization: Bearer" header'ıyla konuşur. Aynı Role (örneğin readonly) hem bir insana (RoleBinding ile) hem bir ServiceAccount'a (yine bir RoleBinding ile, subject.kind: ServiceAccount) bağlanabilir, RBAC'in Role tanımı kimin kullandığından bağımsızdır.
 
 ## Uçtan Uca Akış: Issuer Eşleşmesi Problemi (K8s + k3d + Keycloak)
 <!-- Bu konunun asıl zor kısmı, adım adım -->
@@ -51,7 +52,6 @@ Bunun üstüne iki şey daha ekledik: birincisi tek bir readonly rolü yerine ü
 ## Karşılaştığım Hatalar
 <!-- Bozma senaryolarında ne oldu? Hata mesajı neydi? Neden oldu? -->
 Bu konuda gerçek bir hataya düşülmedi, çünkü issuer eşleşmesi problemi (K8s API server'ın container içinden Keycloak'a farklı bir hostname ile ulaşması) önceden bilinip /etc/hosts düzeltmesiyle baştan engellendi. Normal şartlarda bu adım atlanırsa alınacak hata şu olurdu: apiserver token'ı "invalid issuer" veya benzeri bir mesajla reddederdi, ya da OIDC discovery adımı (host.k3d.internal'e host makineden erişilemediği için) timeout ile başarısız olurdu.
-
 ## Kaynaklar
 <!-- Faydalı bulduğun linkler -->
 - Kubernetes OIDC Authentication resmi dokümantasyonu (kube-apiserver --oidc-* flag'leri)

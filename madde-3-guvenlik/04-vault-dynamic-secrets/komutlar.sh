@@ -229,6 +229,110 @@ vault lease lookup "$LEASE_ID3"
 
 
 # ------------------------------------------------------------
+# BÖLÜM 2: Vault Agent Injector ile secret'ı gerçekten bir K8s pod'una enjekte et
+# ------------------------------------------------------------
+# MANTIK: Su ana kadar Vault'u tamamen K8s DISINDA, Docker container'lari
+# arasinda test ettik. Ama gercek kullanim senaryosu genelde bir pod'un
+# secret'a ihtiyaci olmasi. Bunun icin iki yeni parca lazim: Vault'un
+# pod'lari kimlik olarak taniyabilmesi (Kubernetes auth method) ve
+# secret'i pod'a otomatik dosya olarak yazan bir sidecar (Vault Agent
+# Injector, mutating webhook ile pod'a init/sidecar container ekler).
+
+# ------------------------------------------------------------
+# ADIM 9: Vault'u ve Injector'ı bir K8s cluster'ının İÇİNE kur (Helm ile)
+# ------------------------------------------------------------
+# NOT: Dış Docker container'ındaki Vault'u k8s auth ile entegre etmek
+# yerine (network/erişim karmaşıklığı fazla), standart pattern olan
+# resmi Helm chart'ı kullanıyoruz: Vault'u dev mode'da CLUSTER İÇİNE
+# kuruyoruz, injector.enabled=true ile Agent Injector'ı da otomatik
+# aktif ediyoruz.
+
+k3d cluster create vault-k8s-cluster
+
+brew install helm
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm repo update
+
+helm install vault hashicorp/vault \
+  --set "server.dev.enabled=true" \
+  --set "injector.enabled=true"
+
+kubectl get pods
+# Beklenen: vault-0 (server, dev mode) ve vault-agent-injector-... pod'ları Running
+
+
+# ------------------------------------------------------------
+# ADIM 10: Vault içinde Kubernetes auth method'u etkinleştir
+# ------------------------------------------------------------
+# MANTIK: Bu, Vault'a "bir pod bana kendi ServiceAccount token'ıyla
+# gelirse, bu token'ı K8s API'sine sorup gerçekten geçerli mi diye
+# doğrula" der. OIDC/insan kullanıcı akışından tamamen ayrı bir
+# kimlik doğrulama yolu, pod'lar için özel.
+
+kubectl exec -it vault-0 -- vault auth enable kubernetes
+
+kubectl exec -it vault-0 -- vault write auth/kubernetes/config \
+  kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443"
+# Beklenen: Success! Data written to: auth/kubernetes/config
+
+
+# ------------------------------------------------------------
+# ADIM 11: Basit bir KV secret, ona erişim policy'si, ve bir k8s auth role tanımla
+# ------------------------------------------------------------
+
+kubectl exec -it vault-0 -- vault kv put secret/myapp/config db_password="inject-edilecek-sifre-456"
+
+kubectl exec -it vault-0 -- sh -c 'vault policy write myapp-policy - <<EOF
+path "secret/data/myapp/config" {
+  capabilities = ["read"]
+}
+EOF'
+
+kubectl create serviceaccount myapp-sa
+
+kubectl exec -it vault-0 -- vault write auth/kubernetes/role/myapp-role \
+  bound_service_account_names=myapp-sa \
+  bound_service_account_namespaces=default \
+  policies=myapp-policy \
+  ttl=1h
+# Beklenen: Bu role, SADECE myapp-sa ServiceAccount'ını kullanan default
+# namespace'indeki pod'ların myapp-policy yetkisini almasını sağlar.
+
+
+# ------------------------------------------------------------
+# ADIM 12: Injector annotation'larıyla bir pod aç, secret'ın dosya olarak geldiğini gözle doğrula
+# ------------------------------------------------------------
+# MANTIK: Bu annotation'ları gören mutating webhook (Injector), pod'a
+# otomatik olarak bir init container (ilk secret'ı çeker) ve bir
+# sidecar container (secret'ı canlı tutar) ekler. Uygulama kodu Vault'u
+# hiç bilmek zorunda kalmaz, secret'ı sadece bir dosyadan okur.
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp-pod
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "myapp-role"
+    vault.hashicorp.com/agent-inject-secret-config.txt: "secret/data/myapp/config"
+spec:
+  serviceAccountName: myapp-sa
+  containers:
+  - name: app
+    image: busybox
+    command: ["sh", "-c", "sleep 3600"]
+EOF
+
+kubectl get pod myapp-pod
+# Beklenen: 2/2 Running (app container + vault-agent sidecar)
+
+kubectl exec myapp-pod -c app -- cat /vault/secrets/config.txt
+# Beklenen: içinde "db_password: inject-edilecek-sifre-456" satırı,
+# uygulama kodu HİÇBİR Vault API çağrısı yapmadan secret'ı dosyadan okuyor.
+
+
+# ------------------------------------------------------------
 # ÖZET
 # ------------------------------------------------------------
 # Akış: Vault'a Postgres'e kendi admin yetkisiyle bağlanmayı öğrettik
@@ -239,3 +343,9 @@ vault lease lookup "$LEASE_ID3"
 # kendisi sildi. Statik bir Secret'tan fark: sır burada Vault'ta
 # saklı bir şey değil, ihtiyaç anında üretilen ve kısa ömürlü olan
 # bir şey.
+# BÖLÜM 2: Vault'u cluster içine kurup Kubernetes auth method'unu
+# etkinleştirdik (pod'lar kendi ServiceAccount token'ıyla Vault'a
+# kimliğini kanıtlayabiliyor) -> bir policy + k8s auth role ile "sadece
+# myapp-sa ServiceAccount'ı myapp-policy alsın" dedik -> Injector
+# annotation'larıyla açılan pod'a secret otomatik bir dosya olarak
+# enjekte edildi, uygulama kodu Vault'u hiç bilmeden secret'ı okudu.

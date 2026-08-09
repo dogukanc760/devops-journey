@@ -278,11 +278,59 @@ docker exec k3d-oidc-cluster-server-0 grep "devuser" /var/log/k8s-audit.log | ta
 
 
 # ------------------------------------------------------------
+# ADIM 7: Service Account'a minimal yetki ver (pod'un kimligi, insan degil)
+# ------------------------------------------------------------
+# MANTIK: Su ana kadar hep bir INSAN kullaniciyi (devuser, OIDC ile)
+# yetkilendirdik. Ama pod'larin K8s API'sine erismesi gerektiginde
+# (ornegin bir CI job'i pod'lari listeleyecekse) bunun icin ayri bir
+# kimlik turu var: ServiceAccount. Bir pod'a hangi ServiceAccount
+# atanirsa, o pod K8s API'sine o ServiceAccount'in token'iyla konusur,
+# OIDC/insan kullanicidan tamamen bagimsiz bir mekanizma.
+
+kubectl create serviceaccount ci-reader -n default
+
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-reader-readonly
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: ci-reader
+  namespace: default
+roleRef:
+  kind: Role
+  name: readonly
+  apiGroup: rbac.authorization.k8s.io
+EOF
+# NOT: readonly Role'u zaten ADIM 6'da tanimliydi, ayni Role'u bir
+# insana degil bir ServiceAccount'a baglıyoruz, Role'u tekrar yazmaya
+# gerek yok, RBAC'in "Role tanimini kimin kullandigindan bagimsiz"
+# dogasini gosteriyor.
+
+# Bu ServiceAccount'i kullanan bir pod ac, pod'un icinden kendi
+# token'iyla API server'a konus:
+kubectl run sa-test-pod --image=curlimages/curl --restart=Never \
+  --overrides='{"spec":{"serviceAccountName":"ci-reader"}}' \
+  -it --rm -- sh -c '
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+curl -s -k -H "Authorization: Bearer $TOKEN" \
+  https://kubernetes.default.svc/api/v1/namespaces/default/pods -o /dev/null -w "GET pods: %{http_code}\n"
+curl -s -k -X DELETE -H "Authorization: Bearer $TOKEN" \
+  https://kubernetes.default.svc/api/v1/namespaces/default/pods/sa-test-pod -o /dev/null -w "DELETE pod: %{http_code}\n"
+'
+# Beklenen: "GET pods: 200" (readonly Role izin veriyor), "DELETE pod: 403"
+# (readonly Role'de delete verb'u yok), pod kendi kendini bile silemez.
+
+
+# ------------------------------------------------------------
 # ÖZET
 # ------------------------------------------------------------
 # Akis: Keycloak kimlik dogrular (authentication) -> RBAC yetki
-# sinirlarini cizer (authorization, readonly/dev/ops uc ayri seviye)
-# -> audit log her istegi (ozellikle pod'larin tam govdesini,
-# digerlerini metadata seviyesinde) kaydeder, yetkisiz bir deneme
-# audit log'da devuser + delete + 403 olarak goruluyor.
+# sinirlarini cizer (authorization, readonly/dev/ops uc ayri seviye,
+# hem insan (devuser) hem ServiceAccount (ci-reader) icin) -> audit
+# log her istegi (ozellikle pod'larin tam govdesini, digerlerini
+# metadata seviyesinde) kaydeder, yetkisiz bir deneme audit log'da
+# devuser + delete + 403 olarak goruluyor.
 

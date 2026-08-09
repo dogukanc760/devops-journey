@@ -28,6 +28,7 @@ NetworkPolicy (ya da CiliumNetworkPolicy) ile çözülür, db'ye sadece backend'
 - Default-deny felsefesi: her ihtiyacı önceden tek tek hesaplamak yerine, önce her şeyi kapat, gerçek ihtiyaçlar zamanla ortaya çıktıkça tek tek aç. Daha az karmaşık ve daha güvenli.
 - L3/L4 vs L7: standart K8s NetworkPolicy (herhangi bir CNI'de) sadece IP/port seviyesinde (L3/L4) çalışır, "kiminle konuşabilirsin" sorusuna cevap verir. Cilium'un CiliumNetworkPolicy'si Envoy proxy'yi araya koyarak HTTP isteğinin içeriğini okur (L7), "ne konuşabilirsin" sorusuna cevap verir (örn. GET'e izin ver, DELETE'i reddet), aynı IP/port üzerinden gitmesine rağmen. Bu, standart bir firewall'un asla yapamayacağı bir ayrım.
 - Hubble: Cilium'un gözlemlenebilirlik katmanı, adını Hubble teleskobundan alıyormuş gibi düşünülebilir, "gözlemleme/observation" için var. Hangi isteğin FORWARDED hangi isteğin DROPPED olduğunu gerçek zamanlı gösterir.
+- Policy ihlali alerting: gerçek bir Slack workspace'i olmadığı için, `hubble observe`'un DROPPED çıktısını yakalayıp gerçek bir Slack webhook'una göndermek yerine aynı mantığı (satırı yakala, zaman damgalı bir alert üret) yerel bir `policy-violations.log` dosyasına yazacak şekilde kurguladık. Slack'e POST atan kısım koda hazır ama yorum satırı, gerçek bir webhook geldiğinde direkt açılabilir.
 
 ## Kendi Notum
 <!-- Bunu yarın takım arkadaşına 2 dakikada nasıl anlatırdın? -->
@@ -42,7 +43,6 @@ Eksik bıraktığım nokta şuydu: default-deny ve IP/port bazlı izin aslında 
 ## Karşılaştığım Hatalar
 <!-- Bozma senaryolarında ne oldu? Hata mesajı neydi? Neden oldu? -->
 Cilium'u ilk kurduğumda cilium ve cilium-operator pod'ları Init:Error durumunda takıldı. kubectl describe pod ile baktığımda config init container'ının KUBERNETES_SERVICE_HOST değerinin 0.0.0.0 göründüğünü ve API server'a bağlanamadığını gördüm. Sebep bir tavuk yumurta problemiydi, Cilium kube-proxy'siz modda kuruluyor, yani kubernetes Service'inin ClusterIP'sine giden yolu normalde kube-proxy programlar ama bu iş Cilium'a devredilmiş, Cilium henüz ayağa kalkmadığı için kendi başlaması için gereken API server bağlantısını bulamıyor. Çözüm, cilium install'a --set k8sServiceHost ve --set k8sServicePort ile API server'ın gerçek adresini (k3d'de server container'ının adı, aynı Docker network'ünde DNS ile çözülüyor) açıkça vermek oldu. Yarım kalan bir uninstall denemesi de cilium-secrets namespace'ini terminating durumunda kitledi, cluster'ı silip temiz baştan kurmak en hızlı çözüm oldu.
-
 ## Kaynaklar
 <!-- Faydalı bulduğun linkler -->
 - 
