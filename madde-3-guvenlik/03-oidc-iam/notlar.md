@@ -24,6 +24,9 @@ Cevap:
 - RBAC: yetkilendirme (authorization), "bu kişi ne yapabilir" sorusuna cevap verir. İkisi tamamen ayrı katmanlar, biri diğerini otomatik sağlamaz. Token kabul edilmesi yetki verildiği anlamına gelmez, ayrıca RoleBinding gerekir.
 - oidc-username-claim: JWT içindeki hangi alanın K8s kullanıcı adı sayılacağını belirler (Keycloak'ta genelde preferred_username).
 - id_token vs access_token: K8s'in kabul ettiği id_token'dır, access_token değil.
+- Çoklu rol tasarımı (readonly/dev/ops): least privilege tek bir rolle değil, sorumluluk seviyesine göre ayrı katmanlarda uygulanır. readonly sadece get/list/watch yapar. dev, pod/service/deployment üzerinde create/update/patch de yapabilir ama delete yapamaz, namespace-scoped Role'dür. ops ise delete dahil tüm operasyonel fiillere sahip ama secrets ve rbac.authorization.k8s.io kaynaklarına hiç erişemez, ClusterRole olarak tanımlanır çünkü operasyon genelde tek namespace'le sınırlı kalmaz. "Operasyon yapabilsin ama yetki sistemine dokunamasın" prensibi burada.
+- Audit logging: level: Metadata sadece kim, ne zaman, hangi kaynağa, hangi fiili uyguladı bilgisini loglar, istek/cevap gövdesi yok. level: RequestResponse hem isteği hem cevabı tam gövdesiyle loglar, maliyetli olduğu için sadece kritik kaynaklara (burada pods) uygulanır, geri kalan her şey Metadata seviyesinde kalır. omitStages: [RequestReceived] gereksiz "istek geldi ama henüz işlenmedi" kaydını atlar.
+- apiserver flag'leri (--oidc-*, --audit-policy-file) k3d'de sıcak değiştirilemez, sadece cluster create anında set edilir. Yeni bir flag eklemek (audit) cluster'ı yeniden kurmayı gerektirir, bu yüzden var olan OIDC flag'leri kaybolmasın diye aynı create komutunda tekrar verilir. Audit ile OIDC birbirinden bağımsız iki konu, sadece bu teknik zorunluluktan aynı komutta bir araya geliyorlar.
 
 ## Uçtan Uca Akış: Issuer Eşleşmesi Problemi (K8s + k3d + Keycloak)
 <!-- Bu konunun asıl zor kısmı, adım adım -->
@@ -43,6 +46,8 @@ En can alıcı kısım, K8s API server'ın container içinden çalışması yüz
 
 Sonuçta devuser sadece default namespace'inde pod/deployment okuyabiliyor, silme veya başka namespace'e erişim deneyince Forbidden alıyor, tam istediğimiz least-privilege davranışı.
 
+Bunun üstüne iki şey daha ekledik: birincisi tek bir readonly rolü yerine üç seviyeli bir yetki modeli (readonly, dev, ops), her biri bir öncekinin üstüne fiil ekliyor ama hiçbiri secrets veya rbac kaynaklarına dokunamıyor, çünkü "işini yap ama yetki sistemine dokunma" prensibi hepsinde geçerli. İkincisi audit logging: her isteğin kim tarafından, ne zaman, hangi kaynağa yapıldığı ayrı bir log dosyasına yazılıyor, pod'lar gibi kritik kaynaklarda isteğin/cevabın tam gövdesi tutuluyor, geri kalanında sadece özet (kim/ne/ne zaman) tutuluyor. Bu iki değişiklik cluster'ı yeniden kurmayı gerektirdi çünkü apiserver flag'leri sıcak değiştirilemiyor, OIDC ile audit'in kendisi aslında birbirinden bağımsız konular, sadece aynı cluster create komutunda bir araya geldiler.
+
 ## Karşılaştığım Hatalar
 <!-- Bozma senaryolarında ne oldu? Hata mesajı neydi? Neden oldu? -->
 Bu konuda gerçek bir hataya düşülmedi, çünkü issuer eşleşmesi problemi (K8s API server'ın container içinden Keycloak'a farklı bir hostname ile ulaşması) önceden bilinip /etc/hosts düzeltmesiyle baştan engellendi. Normal şartlarda bu adım atlanırsa alınacak hata şu olurdu: apiserver token'ı "invalid issuer" veya benzeri bir mesajla reddederdi, ya da OIDC discovery adımı (host.k3d.internal'e host makineden erişilemediği için) timeout ile başarısız olurdu.
@@ -51,3 +56,4 @@ Bu konuda gerçek bir hataya düşülmedi, çünkü issuer eşleşmesi problemi 
 <!-- Faydalı bulduğun linkler -->
 - Kubernetes OIDC Authentication resmi dokümantasyonu (kube-apiserver --oidc-* flag'leri)
 - Keycloak kcadm.sh CLI referansı
+- Kubernetes Auditing resmi dokümantasyonu (audit-policy.yaml, level: None/Metadata/Request/RequestResponse)

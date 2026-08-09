@@ -164,12 +164,125 @@ kubectl --token="$TOKEN" get pods -n kube-system
 
 
 # ------------------------------------------------------------
+# ADIM 6: Farkli roller (dev, ops, readonly) + Audit logging
+# ------------------------------------------------------------
+# MANTIK: audit-policy-file, apiserver'a "hangi istekleri, ne
+# detayda logla" der. level: Metadata sadece "kim ne zaman hangi
+# kaynaga hangi fiili uyguladi" bilgisini loglar (govde/body yok).
+# level: RequestResponse hem istegi hem cevabi tam loglar (pods icin
+# ozellikle secildi, cunku pod'lar uzerindeki her hareketi detayli
+# gormek istiyoruz). Audit flag'leri sicak eklenemedigi icin cluster
+# yeniden kuruldu, OIDC flag'leri de korunarak.
+
+cat > audit-policy.yaml << 'EOF'
+apiVersion: audit.k8s.io/v1
+kind: Policy
+rules:
+- level: RequestResponse
+  resources:
+  - group: ""
+    resources: ["pods"]
+- level: Metadata
+  omitStages:
+  - RequestReceived
+EOF
+
+k3d cluster delete oidc-cluster
+
+k3d cluster create oidc-cluster \
+  --volume "$(pwd)/audit-policy.yaml:/etc/rancher/k3s/audit-policy.yaml" \
+  --k3s-arg '--kube-apiserver-arg=oidc-issuer-url=http://host.k3d.internal:8180/realms/k8s-realm@server:*' \
+  --k3s-arg '--kube-apiserver-arg=oidc-client-id=k8s-client@server:*' \
+  --k3s-arg '--kube-apiserver-arg=oidc-username-claim=preferred_username@server:*' \
+  --k3s-arg '--kube-apiserver-arg=oidc-groups-claim=groups@server:*' \
+  --k3s-arg '--kube-apiserver-arg=audit-policy-file=/etc/rancher/k3s/audit-policy.yaml@server:*' \
+  --k3s-arg '--kube-apiserver-arg=audit-log-path=/var/log/k8s-audit.log@server:*'
+
+kubectl get nodes
+
+# RBAC'i (readonly) ve iki yeni rolu (dev, ops) tekrar uygula, cluster
+# yeniden kuruldugu icin state sifirlandi.
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: readonly
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dev
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ops
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# NOT: ops bile secrets/rbac.authorization.k8s.io kaynaklarina hic
+# erisemiyor, "operasyon yap ama yetki sistemine dokunma" prensibi.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: devuser-readonly
+  namespace: default
+subjects:
+- kind: User
+  name: devuser
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: readonly
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+# devuser icin token'i yeniden al (cluster yeniden kuruldu ama
+# Keycloak container'i ayakta kaldigi icin realm/client/user duruyor)
+TOKEN=$(curl -s -X POST http://host.k3d.internal:8180/realms/k8s-realm/protocol/openid-connect/token \
+  -d grant_type=password \
+  -d client_id=k8s-client \
+  -d username=devuser \
+  -d password=devpass123 | python3 -c "import sys,json; print(json.load(sys.stdin)['id_token'])")
+
+# Yetkisiz erisim denemesi uret (devuser kube-system'a delete atmaya calissin)
+kubectl --token="$TOKEN" delete pod fake-pod -n kube-system
+# Beklenen: Forbidden hatasi doner
+
+# Bu denemenin audit log'a dustugunu dogrula
+docker exec k3d-oidc-cluster-server-0 tail -n 20 /var/log/k8s-audit.log | python3 -m json.tool 2>/dev/null || \
+docker exec k3d-oidc-cluster-server-0 grep "devuser" /var/log/k8s-audit.log | tail -5
+# Beklenen: user.username: devuser, verb: delete, gecerli olmayan
+# yetki nedeniyle responseStatus.code: 403 iceren bir audit kaydi
+
+
+# ------------------------------------------------------------
 # ÖZET
 # ------------------------------------------------------------
-# Tum adimlar sorunsuz calisti (Keycloak + /etc/hosts + OIDC cluster +
-# RBAC + token testleri), issuer eslesmesi problemi onceden bilinip
-# /etc/hosts duzeltmesiyle bastan engellendigi icin gerci bir hataya
-# dusulmedi. Akis: Keycloak kimlik dogrular (authentication) -> RBAC
-# yetki sinirlarini cizer (authorization) -> devuser sadece default
-# namespace'inde pod/deployment okuyabiliyor, baska hicbir sey yapamiyor.
+# Akis: Keycloak kimlik dogrular (authentication) -> RBAC yetki
+# sinirlarini cizer (authorization, readonly/dev/ops uc ayri seviye)
+# -> audit log her istegi (ozellikle pod'larin tam govdesini,
+# digerlerini metadata seviyesinde) kaydeder, yetkisiz bir deneme
+# audit log'da devuser + delete + 403 olarak goruluyor.
 
