@@ -177,6 +177,7 @@ Not: `-` ve `—` gibi tire işaretleri notlarda kullanılmıyor.
 - `01-load-stress-soak-test/` — k6, p50/p95/p99
 - `02-kapasite-planlama/` — Little's Law, bottleneck analizi
 - `03-autoscaler-aws-olcekleme/` — HPA/VPA/Cluster Autoscaler, Spot instance
+- `04-profiling-darbogaz-analizi/` — flame graph, pprof/py-spy, continuous profiling
 </details>
 
 <details>
@@ -217,6 +218,7 @@ Not: `-` ve `—` gibi tire işaretleri notlarda kullanılmıyor.
 - `01-kafka-streaming-temelleri/` — Broker, partition, consumer group
 - `02-schema-registry-veri-sozlesmesi/` — Avro/Protobuf, compatibility
 - `03-stream-processing/` — ksqlDB, windowing
+- `04-kafka-operasyonlari-production/` — ISR, rebalancing, Kafka Connect/CDC, MirrorMaker 2
 </details>
 
 <details>
